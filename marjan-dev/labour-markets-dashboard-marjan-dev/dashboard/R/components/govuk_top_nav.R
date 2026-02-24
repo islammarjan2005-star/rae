@@ -77,6 +77,69 @@ govuk_top_nav <- function(tabs, selected = NULL, id_prefix = "nav") {
   )
 }
 
+side_nav <- function(ns, sections = NULL, items = NULL,
+                     title = "On this page",
+                     subheading_class = "ons-u-fs-r--b ons-u-mb-s") {
+  stopifnot(is.function(ns))
 
+  # Backward compatibility: if `sections` not provided, use legacy `items`
+  if (is.null(sections)) {
+    if (is.null(items) || length(items) < 1)
+      stop("Provide either `sections` (preferred) or a non-empty `items` list.")
+    if (is.null(names(items)))
+      stop("Legacy `items` must be named: names = labels, values = ids.")
+    sections <- list(list(heading = NULL, items = items))
+  }
 
+  # Validate sections
+  stopifnot(is.list(sections), length(sections) >= 1)
+  for (i in seq_along(sections)) {
+    sec <- sections[[i]]
+    if (!is.list(sec) || !"items" %in% names(sec))
+      stop("Each section must be a list with at least `items` (named).")
+    if (is.null(names(sec$items)))
+      stop("Section `items` must be named: names = labels, values = ids.")
+  }
+
+  # Render
+  tags$nav(
+    id = ns("toc"),
+    class = "sidebar ons-section-nav ons-section-nav--vertical",
+    `aria-label` = title,
+    tags$h2(class = "govuk-heading-s", title),
+
+    # Each section group
+    lapply(seq_along(sections), function(si) {
+      sec <- sections[[si]]
+      tags$div(
+        class = "ons-section-nav__group",
+        # Subsection heading (uses requested class)
+        if (!is.null(sec$heading) && nzchar(sec$heading)) {
+          tags$h3(
+            class = paste(subheading_class, "ons-section-nav__title"),
+            sec$heading
+          )
+        },
+
+        # Items for this group
+        tags$ul(
+          class = "ons-section-nav__list",
+          lapply(seq_along(sec$items), function(i) {
+            lbl <- names(sec$items)[i]
+            id  <- unname(sec$items[[i]])
+            tags$li(
+              class = "ons-section-nav__item",
+              tags$a(
+                class = "nav-link ons-section-nav__link",
+                `data-section` = id,
+                href = "javascript:void(0)",
+                lbl
+              )
+            )
+          })
+        )
+      )
+    })
+  )
+}
 
