@@ -3,6 +3,7 @@
 
 library(ggplot2)
 library(plotly)
+library(maps)
 
 # ---- UK Region Reference Data (ONS area codes -> names & centroids) ----
 UK_REGIONS <- data.frame(
@@ -124,7 +125,7 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
     })
 
     # Filtered + merged with coordinates
-    map_data <- reactive({
+    map_df <- reactive({
       d <- all_regional()
       req(nrow(d) > 0)
 
@@ -138,76 +139,72 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
       merged
     })
 
-    # ---- Interactive scattergeo map ----
+    # ---- Interactive map using maps package ----
     output$uk_map <- renderPlotly({
-      d <- map_data()
+      d <- map_df()
       req(nrow(d) > 0)
 
       is_rate <- input$value_type == "Rate"
       suffix  <- if (is_rate) "%" else " (000s)"
 
-      # Bubble sizing
+      # Get UK outline from maps package
+      uk_map <- ggplot2::map_data("world", region = c(
+        "UK", "Ireland:Northern Ireland"
+      ))
+
+      # Build bubble size
       vals <- d$value
-      size_range <- if (is_rate) c(22, 48) else c(15, 55)
+      size_range <- c(4, 12)
       if (length(unique(vals)) == 1L) {
-        scaled <- rep(mean(size_range), length(vals))
+        d$pt_size <- rep(mean(size_range), length(vals))
       } else {
-        scaled <- scales::rescale(vals, to = size_range, from = range(vals, na.rm = TRUE))
+        d$pt_size <- size_range[1] + (vals - min(vals, na.rm = TRUE)) /
+          (max(vals, na.rm = TRUE) - min(vals, na.rm = TRUE)) *
+          (size_range[2] - size_range[1])
       }
 
-      # GOV.UK colour ramp
-      col_low  <- "#1d70b8"
-      col_high <- "#cf102d"
+      d$hover_text <- paste0(
+        d$region_name, "\n",
+        input$measure, " (", input$value_type, "): ",
+        format(round(d$value, 1), big.mark = ","), suffix
+      )
 
-      plot_ly(
-        d,
-        type  = "scattergeo",
-        lat   = ~lat,
-        lon   = ~lon,
-        text  = ~paste0(
-          "<b>", region_name, "</b><br>",
-          input$measure, " (", input$value_type, "): ",
-          format(round(value, 1), big.mark = ","), suffix
-        ),
-        hoverinfo = "text",
-        marker = list(
-          size  = scaled,
-          color = vals,
-          colorscale = list(c(0, col_low), c(1, col_high)),
-          colorbar   = list(
-            title     = list(text = paste0(input$value_type, suffix)),
-            thickness = 15,
-            len       = 0.5
-          ),
-          line    = list(color = "#ffffff", width = 1.5),
-          opacity = 0.85
+      p <- ggplot() +
+        geom_polygon(
+          data = uk_map,
+          aes(x = long, y = lat, group = group),
+          fill = "#f3f2f1", colour = "#b1b4b6", linewidth = 0.3
+        ) +
+        geom_point(
+          data = d,
+          aes(x = lon, y = lat, size = pt_size, colour = value,
+              text = hover_text),
+          alpha = 0.85
+        ) +
+        scale_colour_gradient(
+          low  = "#1d70b8",
+          high = "#cf102d",
+          name = paste0(input$value_type, suffix)
+        ) +
+        scale_size_identity() +
+        coord_quickmap(xlim = c(-9, 3), ylim = c(49.5, 59.5)) +
+        theme_void() +
+        theme(
+          legend.position = "right",
+          plot.background = element_rect(fill = "#e8f4f8", colour = NA)
         )
-      ) %>%
+
+      ggplotly(p, tooltip = "text") %>%
         layout(
-          geo = list(
-            scope          = "europe",
-            resolution     = 50,
-            showland       = TRUE,
-            landcolor      = "#f3f2f1",
-            showocean      = TRUE,
-            oceancolor     = "#e8f4f8",
-            showcountries  = TRUE,
-            countrycolor   = "#b1b4b6",
-            showcoastlines = TRUE,
-            coastlinecolor = "#b1b4b6",
-            lonaxis    = list(range = c(-9, 3)),
-            lataxis    = list(range = c(49.5, 59.5)),
-            projection = list(type = "mercator")
-          ),
           showlegend = FALSE,
-          margin     = list(l = 0, r = 0, t = 10, b = 0)
+          margin = list(l = 0, r = 0, t = 10, b = 0)
         ) %>%
         config(displayModeBar = FALSE)
     })
 
     # ---- Horizontal bar chart ----
     output$bar_chart <- renderPlotly({
-      d <- map_data()
+      d <- map_df()
       req(nrow(d) > 0)
 
       is_rate <- input$value_type == "Rate"
@@ -244,7 +241,7 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
 
     # ---- Data table ----
     output$region_table <- reactable::renderReactable({
-      d <- map_data()
+      d <- map_df()
       req(nrow(d) > 0)
 
       is_rate <- input$value_type == "Rate"
