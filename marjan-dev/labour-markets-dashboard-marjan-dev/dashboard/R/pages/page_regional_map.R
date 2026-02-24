@@ -136,23 +136,37 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
       get_regional_tbl(conn)
     })
 
-    # Populate dropdowns from actual data values
+    # Populate employment_group dropdown from data (first load only)
     observe({
       d <- all_regional()
       if (is.null(d) || nrow(d) == 0) return()
 
-      measures   <- sort(unique(d$employment_group))
-      vtypes     <- sort(unique(d$value_type))
-      age_groups <- sort(unique(d$age_group))
+      measures <- sort(unique(d$employment_group))
+      measure_sel <- if ("Economically inactive" %in% measures) "Economically inactive" else measures[1]
+      updateSelectInput(session, "measure", choices = measures, selected = measure_sel)
+    }) |> bindEvent(all_regional())
 
-      # Pick sensible defaults (first match or first item)
-      measure_sel <- if ("Employment" %in% measures) "Employment" else measures[1]
-      vtype_sel   <- if ("Level" %in% vtypes) "Level" else vtypes[1]
-      age_sel     <- age_groups[1]
+    # Cascade: when measure changes, update value_type choices
+    observeEvent(input$measure, {
+      d <- all_regional()
+      if (is.null(d) || nrow(d) == 0) return()
 
-      updateSelectInput(session, "measure",    choices = measures,   selected = measure_sel)
-      updateSelectInput(session, "value_type", choices = vtypes,     selected = vtype_sel)
-      updateSelectInput(session, "age_group",  choices = age_groups, selected = age_sel)
+      sub <- d[d$employment_group == input$measure, ]
+      vtypes <- sort(unique(sub$value_type))
+      vtype_sel <- if ("Level" %in% vtypes) "Level" else vtypes[1]
+      updateSelectInput(session, "value_type", choices = vtypes, selected = vtype_sel)
+    })
+
+    # Cascade: when measure or value_type changes, update age_group choices
+    observeEvent(list(input$measure, input$value_type), {
+      d <- all_regional()
+      if (is.null(d) || nrow(d) == 0 || is.null(input$measure) || is.null(input$value_type)) return()
+
+      sub <- d[d$employment_group == input$measure & d$value_type == input$value_type, ]
+      age_groups <- sort(unique(sub$age_group))
+      if (length(age_groups) == 0) return()
+      age_sel <- age_groups[1]
+      updateSelectInput(session, "age_group", choices = age_groups, selected = age_sel)
     })
 
     # Filtered + merged with coordinates
@@ -180,16 +194,19 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
       cat("Query returned:", nrow(d), "rows\n")
       cat("Columns:", paste(names(d), collapse = ", "), "\n")
       if (nrow(d) > 0) {
-        cat("\nFirst 5 rows:\n")
-        print(head(d, 5))
         cat("\nUnique employment_group:", paste(unique(d$employment_group), collapse = " | "), "\n")
         cat("Unique value_type:", paste(unique(d$value_type), collapse = " | "), "\n")
         cat("Unique age_group:", paste(unique(d$age_group), collapse = " | "), "\n")
-        cat("Unique area_code:", paste(unique(d$area_code), collapse = " | "), "\n")
+
+        # Show all valid combinations and their region counts
+        combos <- aggregate(area_code ~ employment_group + value_type + age_group, data = d, FUN = length)
+        names(combos)[4] <- "n_regions"
+        cat("\n--- Valid combinations (regions count) ---\n")
+        print(combos)
       }
 
       rd <- region_data()
-      cat("\n--- After filtering ---\n")
+      cat("\n--- Current selection ---\n")
       cat("Selected measure:", input$measure, "\n")
       cat("Selected value_type:", input$value_type, "\n")
       cat("Selected age_group:", input$age_group, "\n")
