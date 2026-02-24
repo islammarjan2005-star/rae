@@ -1,11 +1,10 @@
-# R/pages/page_regional_map.R
-# Regional Employment Map page — plots UK regional data on an interactive map
+# regional map page
 
 library(ggplot2)
 library(plotly)
 library(maps)
 
-# ---- UK Region Reference Data (ONS area codes -> names & centroids) ----
+# region lookup
 UK_REGIONS <- data.frame(
   area_code   = c("E12000001", "E12000002", "E12000003", "E12000004",
                    "E12000005", "E12000006", "E12000007", "E12000008",
@@ -20,7 +19,7 @@ UK_REGIONS <- data.frame(
 )
 
 
-# ---- Data fetch with error handling ----
+# data fetch
 get_regional_tbl <- function(conn) {
   tryCatch(
     DBI::dbGetQuery(conn, "
@@ -60,7 +59,7 @@ get_regional_tbl <- function(conn) {
 }
 
 
-# ---- UI ----
+# ui
 regional_map_ui <- function(id) {
   ns <- NS(id)
 
@@ -71,7 +70,7 @@ regional_map_ui <- function(id) {
         tags$h1(class = "govuk-heading-xl", "Regional Employment Map"),
         tags$p(class = "govuk-body-s", paste("Last updated:", Sys.Date())),
 
-        # ---- Debug info (remove once working) ----
+        # debug panel
         div(class = "govuk-grid-row",
           div(class = "govuk-grid-column-full",
             tags$details(class = "govuk-details",
@@ -85,7 +84,7 @@ regional_map_ui <- function(id) {
           )
         ),
 
-        # ---- Controls (populated dynamically from data) ----
+        # dropdowns
         div(class = "govuk-grid-row",
           div(class = "govuk-grid-column-one-third",
             selectInput(ns("measure"), "Employment Measure", choices = NULL)
@@ -98,7 +97,7 @@ regional_map_ui <- function(id) {
           )
         ),
 
-        # ---- Map ----
+        # map
         div(class = "govuk-grid-row",
           div(class = "govuk-grid-column-full",
             tags$h2(class = "govuk-heading-l", "UK Regional Employment Map"),
@@ -106,7 +105,7 @@ regional_map_ui <- function(id) {
           )
         ),
 
-        # ---- Bar chart ----
+        # bar chart
         div(class = "govuk-grid-row", style = "margin-top: 30px;",
           div(class = "govuk-grid-column-full",
             tags$h2(class = "govuk-heading-l", "Regional Comparison"),
@@ -114,7 +113,7 @@ regional_map_ui <- function(id) {
           )
         ),
 
-        # ---- Data table ----
+        # table
         div(class = "govuk-grid-row", style = "margin-top: 30px;",
           div(class = "govuk-grid-column-full",
             tags$h2(class = "govuk-heading-l", "Data Table"),
@@ -127,16 +126,16 @@ regional_map_ui <- function(id) {
 }
 
 
-# ---- Server ----
+# server
 regional_map_server <- function(id, conn = APP_DB$pool) {
   moduleServer(id, function(input, output, session) {
 
-    # Fetch all regional data (cached per session)
+    # fetch data
     all_regional <- reactive({
       get_regional_tbl(conn)
     })
 
-    # Populate employment_group dropdown from data (first load only)
+    # init dropdowns
     observe({
       d <- all_regional()
       if (is.null(d) || nrow(d) == 0) return()
@@ -146,7 +145,7 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
       updateSelectInput(session, "measure", choices = measures, selected = measure_sel)
     }) |> bindEvent(all_regional())
 
-    # Cascade: when measure changes, update value_type choices
+    # cascade value_type
     observeEvent(input$measure, {
       d <- all_regional()
       if (is.null(d) || nrow(d) == 0) return()
@@ -157,7 +156,7 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
       updateSelectInput(session, "value_type", choices = vtypes, selected = vtype_sel)
     })
 
-    # Cascade: when measure or value_type changes, update age_group choices
+    # cascade age_group
     observeEvent(list(input$measure, input$value_type), {
       d <- all_regional()
       if (is.null(d) || nrow(d) == 0 || is.null(input$measure) || is.null(input$value_type)) return()
@@ -169,7 +168,7 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
       updateSelectInput(session, "age_group", choices = age_groups, selected = age_sel)
     })
 
-    # Filtered + merged with coordinates
+    # filter + merge
     region_data <- reactive({
       d <- all_regional()
       if (is.null(d) || nrow(d) == 0) return(NULL)
@@ -188,7 +187,7 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
       merged
     })
 
-    # ---- Debug output ----
+    # debug output
     output$debug_info <- renderPrint({
       d <- all_regional()
       cat("Query returned:", nrow(d), "rows\n")
@@ -198,7 +197,7 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
         cat("Unique value_type:", paste(unique(d$value_type), collapse = " | "), "\n")
         cat("Unique age_group:", paste(unique(d$age_group), collapse = " | "), "\n")
 
-        # Show all valid combinations and their region counts
+        # combo counts
         combos <- aggregate(area_code ~ employment_group + value_type + age_group, data = d, FUN = length)
         names(combos)[4] <- "n_regions"
         cat("\n--- Valid combinations (regions count) ---\n")
@@ -213,7 +212,7 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
       cat("Filtered rows:", if (is.null(rd)) 0 else nrow(rd), "\n")
     })
 
-    # ---- Map: ALWAYS shows UK outline, overlays data if available ----
+    # map plot
     output$uk_map <- renderPlotly({
       uk_map <- ggplot2::map_data("world", region = c(
         "UK", "Ireland:Northern Ireland"
@@ -275,7 +274,7 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
         config(displayModeBar = FALSE)
     })
 
-    # ---- Horizontal bar chart ----
+    # bar chart
     output$bar_chart <- renderPlotly({
       d <- region_data()
       req(!is.null(d) && nrow(d) > 0)
@@ -310,7 +309,7 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
         config(displayModeBar = FALSE)
     })
 
-    # ---- Data table ----
+    # data table
     output$region_table <- reactable::renderReactable({
       d <- region_data()
       req(!is.null(d) && nrow(d) > 0)
