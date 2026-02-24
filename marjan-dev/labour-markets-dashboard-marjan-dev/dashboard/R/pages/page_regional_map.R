@@ -19,30 +19,41 @@ UK_REGIONS <- data.frame(
   stringsAsFactors = FALSE
 )
 
-REGIONAL_AREA_CODES <- UK_REGIONS$area_code
-
 EMPLOYMENT_GROUPS   <- c("Employment", "Unemployment",
                          "Economically active", "Economically inactive")
 VALUE_TYPES         <- c("Rate", "Level")
 AGE_GROUPS_REGIONAL <- c("Aged 16 and over", "Aged 16 to 64")
 
 
-# ---- Data fetch ----
+# ---- Data fetch with error handling ----
 get_regional_tbl <- function(conn) {
-  DBI::dbGetQuery(conn, "
-    SELECT employment_group,
-           age_group,
-           value_type,
-           area_code,
-           CAST(value AS NUMERIC) AS value
-    FROM   ons.labour_market__regional_survey
-    WHERE  area_code IN (
-             'E12000001','E12000002','E12000003','E12000004',
-             'E12000005','E12000006','E12000007','E12000008',
-             'E12000009','W92000004','S92000003','N92000002'
-           )
-    ORDER BY area_code
-  ")
+  tryCatch(
+    DBI::dbGetQuery(conn, "
+      SELECT employment_group,
+             age_group,
+             value_type,
+             area_code,
+             CAST(value AS NUMERIC) AS value
+      FROM   ons.labour_market__regional_survey
+      WHERE  area_code IN (
+               'E12000001','E12000002','E12000003','E12000004',
+               'E12000005','E12000006','E12000007','E12000008',
+               'E12000009','W92000004','S92000003','N92000002'
+             )
+      ORDER BY area_code
+    "),
+    error = function(e) {
+      message("Regional query error: ", conditionMessage(e))
+      data.frame(
+        employment_group = character(),
+        age_group        = character(),
+        value_type       = character(),
+        area_code        = character(),
+        value            = numeric(),
+        stringsAsFactors = FALSE
+      )
+    }
+  )
 }
 
 
@@ -56,6 +67,20 @@ regional_map_ui <- function(id) {
         tags$span(class = "govuk-caption-xl", "Labour Market"),
         tags$h1(class = "govuk-heading-xl", "Regional Employment Map"),
         tags$p(class = "govuk-body-s", paste("Last updated:", Sys.Date())),
+
+        # ---- Debug info (remove once working) ----
+        div(class = "govuk-grid-row",
+          div(class = "govuk-grid-column-full",
+            tags$details(class = "govuk-details",
+              tags$summary(class = "govuk-details__summary",
+                tags$span(class = "govuk-details__summary-text", "Debug: Query Info")
+              ),
+              tags$div(class = "govuk-details__text",
+                verbatimTextOutput(ns("debug_info"))
+              )
+            )
+          )
+        ),
 
         # ---- Controls ----
         div(class = "govuk-grid-row",
@@ -117,47 +142,42 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
     # Filtered + merged with coordinates
     region_data <- reactive({
       d <- all_regional()
-      req(nrow(d) > 0)
+      if (is.null(d) || nrow(d) == 0) return(NULL)
 
       d <- d[d$employment_group == input$measure &
              d$value_type      == input$value_type &
              d$age_group       == input$age_group, ]
 
+      if (nrow(d) == 0) return(NULL)
+
       merged <- merge(d, UK_REGIONS, by = "area_code", all.x = FALSE)
       merged$value <- as.numeric(merged$value)
       merged <- merged[!is.na(merged$value), ]
+      if (nrow(merged) == 0) return(NULL)
       merged
     })
 
-    # ---- Interactive map using maps package ----
+    # ---- Debug output (shows query row count + column names) ----
+    output$debug_info <- renderPrint({
+      d <- all_regional()
+      cat("Query returned:", nrow(d), "rows\n")
+      cat("Columns:", paste(names(d), collapse = ", "), "\n")
+      if (nrow(d) > 0) {
+        cat("\nFirst 5 rows:\n")
+        print(head(d, 5))
+        cat("\nUnique employment_group:", paste(unique(d$employment_group), collapse = ", "), "\n")
+        cat("Unique value_type:", paste(unique(d$value_type), collapse = ", "), "\n")
+        cat("Unique age_group:", paste(unique(d$age_group), collapse = ", "), "\n")
+        cat("Unique area_code:", paste(unique(d$area_code), collapse = ", "), "\n")
+      }
+    })
+
+    # ---- Map: ALWAYS shows UK outline, overlays data if available ----
     output$uk_map <- renderPlotly({
-      d <- region_data()
-      req(nrow(d) > 0)
-
-      is_rate <- input$value_type == "Rate"
-      suffix  <- if (is_rate) "%" else " (000s)"
-
-      # UK outline from maps package
+      # UK outline always renders
       uk_map <- ggplot2::map_data("world", region = c(
         "UK", "Ireland:Northern Ireland"
       ))
-
-      # Build bubble size
-      vals <- d$value
-      size_range <- c(4, 12)
-      if (length(unique(vals)) == 1L) {
-        d$pt_size <- rep(mean(size_range), length(vals))
-      } else {
-        d$pt_size <- size_range[1] + (vals - min(vals, na.rm = TRUE)) /
-          (max(vals, na.rm = TRUE) - min(vals, na.rm = TRUE)) *
-          (size_range[2] - size_range[1])
-      }
-
-      d$hover_text <- paste0(
-        d$region_name, "\n",
-        input$measure, " (", input$value_type, "): ",
-        format(round(d$value, 1), big.mark = ","), suffix
-      )
 
       p <- ggplot() +
         geom_polygon(
@@ -165,24 +185,49 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
           aes(x = long, y = lat, group = group),
           fill = "#f3f2f1", colour = "#b1b4b6", linewidth = 0.3
         ) +
-        geom_point(
-          data = d,
-          aes(x = lon, y = lat, size = pt_size, colour = value,
-              text = hover_text),
-          alpha = 0.85
-        ) +
-        scale_colour_gradient(
-          low  = "#1d70b8",
-          high = "#cf102d",
-          name = paste0(input$value_type, suffix)
-        ) +
-        scale_size_identity() +
         coord_quickmap(xlim = c(-9, 3), ylim = c(49.5, 59.5)) +
         theme_void() +
         theme(
           legend.position = "right",
           plot.background = element_rect(fill = "#e8f4f8", colour = NA)
         )
+
+      # Overlay data points only if data exists
+      d <- region_data()
+      if (!is.null(d) && nrow(d) > 0) {
+        is_rate <- input$value_type == "Rate"
+        suffix  <- if (is_rate) "%" else " (000s)"
+
+        vals <- d$value
+        size_range <- c(4, 12)
+        if (length(unique(vals)) == 1L) {
+          d$pt_size <- rep(mean(size_range), length(vals))
+        } else {
+          d$pt_size <- size_range[1] + (vals - min(vals, na.rm = TRUE)) /
+            (max(vals, na.rm = TRUE) - min(vals, na.rm = TRUE)) *
+            (size_range[2] - size_range[1])
+        }
+
+        d$hover_text <- paste0(
+          d$region_name, "\n",
+          input$measure, " (", input$value_type, "): ",
+          format(round(d$value, 1), big.mark = ","), suffix
+        )
+
+        p <- p +
+          geom_point(
+            data = d,
+            aes(x = lon, y = lat, size = pt_size, colour = value,
+                text = hover_text),
+            alpha = 0.85
+          ) +
+          scale_colour_gradient(
+            low  = "#1d70b8",
+            high = "#cf102d",
+            name = paste0(input$value_type, suffix)
+          ) +
+          scale_size_identity()
+      }
 
       ggplotly(p, tooltip = "text") %>%
         layout(
@@ -195,13 +240,12 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
     # ---- Horizontal bar chart ----
     output$bar_chart <- renderPlotly({
       d <- region_data()
-      req(nrow(d) > 0)
+      req(!is.null(d) && nrow(d) > 0)
 
       is_rate <- input$value_type == "Rate"
       suffix  <- if (is_rate) "%" else " (000s)"
       x_title <- paste0(input$measure, " ", input$value_type, suffix)
 
-      # Order regions by value
       d <- d[order(d$value), ]
       d$region_name <- factor(d$region_name, levels = d$region_name)
 
@@ -232,10 +276,7 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
     # ---- Data table ----
     output$region_table <- reactable::renderReactable({
       d <- region_data()
-      req(nrow(d) > 0)
-
-      is_rate <- input$value_type == "Rate"
-      suffix  <- if (is_rate) "%" else " (000s)"
+      req(!is.null(d) && nrow(d) > 0)
 
       display <- d[, c("region_name", "employment_group", "age_group",
                         "value_type", "value")]
