@@ -39,27 +39,27 @@ govuk_header <- function(
     style        = c("GOVUK", "DBT"),
     dbt_logo_src = "DBT_white_cropped.png",
     dbt_logo_alt = "Department for Business and Trade",
-    height       = 60  # NEW: logo height in px
+    height       = 60
 ) {
   style <- match.arg(style)
-  
+
   logo_block <- if (style == "DBT") {
     tags$div(
       class = "govuk-header__logo",
       tags$a(
         href  = home_href,
         class = "govuk-header__link govuk-header__link--homepage",
-        style = sprintf("display:inline-block;height:%dpx;line-height:%dpx;", height, height),
+        style = sprintf("display:inline-flex; align-items:center; height:%dpx; line-height:%dpx;", height, height),
         tags$img(
           src    = dbt_logo_src,
           alt    = dbt_logo_alt,
           class  = "govuk-header__logotype",
-          height = height
+          style  = sprintf("height:%dpx; width:auto; max-width:none;", height)
         )
       )
     )
   } else {
-    # GOV.UK crown unchanged
+    # GOV.UK crown
     tags$div(
       class = "govuk-header__logo",
       tags$a(
@@ -105,16 +105,15 @@ govuk_header <- function(
       )
     )
   } else NULL
-  
+
   tags$header(
     class = "govuk-header govuk-header--full-width-border",
     `data-module` = "govuk-header",
     tags$div(
       class = "govuk-header__container govuk-width-container",
-      style = "display:flex; align-items:center;",  # NEW
+      style = "display:flex; align-items:center;",
       logo_block,
       service_block
-      
     )
   )
 }
