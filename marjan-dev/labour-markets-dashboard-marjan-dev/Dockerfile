@@ -6,8 +6,7 @@ RUN Rscript -e 'options(warn = 2); install.packages(c( \
 "shinydashboard",\
 "plotly",\
 "ggplot2",\
-"shinyWidgets",\
-"maps"\
+"shinyWidgets"\
 ), clean = TRUE)'
 COPY /app .
 CMD ["R", "-e", "shiny::runApp('/app', host = '0.0.0.0', port = 8888)"]

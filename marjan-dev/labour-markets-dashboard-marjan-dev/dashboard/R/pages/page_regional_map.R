@@ -3,7 +3,31 @@
 
 library(ggplot2)
 library(plotly)
-library(maps)
+
+# ---- Simplified UK coastline (no internet / maps package needed) ----
+UK_OUTLINE <- rbind(
+  # Great Britain
+  data.frame(
+    long = c(-5.7,-5.0,-4.2,-3.5,-2.5,-1.3,-0.8, 0.3, 1.0, 1.4, 1.7,
+             1.7, 1.2, 0.5, 0.2,-0.2, 0.0,-0.5,-1.2,-1.6,-2.0,-1.8,
+            -2.0,-2.5,-3.0,-3.4,-4.0,-5.0,-5.2,-5.5,-5.8,-5.5,-5.8,
+            -5.5,-4.8,-5.0,-5.0,-4.4,-3.4,-3.0,-3.1,-3.4,-4.0,-4.5,
+            -5.2,-5.3,-4.5,-3.8,-3.2,-3.0,-3.6,-4.2,-5.0,-5.7),
+    lat  = c(50.1, 50.0, 50.3, 50.2, 50.6, 50.7, 50.7, 50.8, 51.1, 51.4,
+             51.9, 52.5, 52.8, 53.0, 53.5, 53.7, 54.0, 54.6, 55.0, 55.6,
+             56.0, 56.5, 57.0, 57.7, 58.2, 58.6, 58.6, 58.6, 58.0, 57.5,
+             57.0, 56.5, 56.0, 55.8, 55.3, 55.0, 54.7, 54.8, 54.5, 53.5,
+             53.2, 53.0, 52.8, 52.5, 51.8, 51.5, 51.4, 51.5, 51.4, 51.2,
+             51.0, 50.8, 50.3, 50.1),
+    group = 1L, stringsAsFactors = FALSE
+  ),
+  # Northern Ireland
+  data.frame(
+    long = c(-5.5,-5.9,-6.2,-6.7,-7.3,-7.6,-7.3,-7.0,-6.5,-6.0,-5.5),
+    lat  = c(54.1, 54.3, 54.6, 55.0, 55.2, 55.3, 55.0, 54.7, 54.3, 54.1, 54.1),
+    group = 2L, stringsAsFactors = FALSE
+  )
+)
 
 # ---- UK Region Reference Data (ONS area codes -> names & centroids) ----
 UK_REGIONS <- data.frame(
@@ -139,18 +163,13 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
       merged
     })
 
-    # ---- Interactive map using maps package ----
+    # ---- Interactive map using embedded UK outline (offline-safe) ----
     output$uk_map <- renderPlotly({
       d <- map_df()
       req(nrow(d) > 0)
 
       is_rate <- input$value_type == "Rate"
       suffix  <- if (is_rate) "%" else " (000s)"
-
-      # Get UK outline from maps package
-      uk_map <- ggplot2::map_data("world", region = c(
-        "UK", "Ireland:Northern Ireland"
-      ))
 
       # Build bubble size
       vals <- d$value
@@ -171,7 +190,7 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
 
       p <- ggplot() +
         geom_polygon(
-          data = uk_map,
+          data = UK_OUTLINE,
           aes(x = long, y = lat, group = group),
           fill = "#f3f2f1", colour = "#b1b4b6", linewidth = 0.3
         ) +
