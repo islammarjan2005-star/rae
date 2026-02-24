@@ -36,7 +36,7 @@ get_regional_tbl <- function(conn) {
            value_type,
            area_code,
            CAST(value AS NUMERIC) AS value
-    FROM   ons.labour_market__regional
+    FROM   ons.labour_market__regional_survey
     WHERE  area_code IN (
              'E12000001','E12000002','E12000003','E12000004',
              'E12000005','E12000006','E12000007','E12000008',
