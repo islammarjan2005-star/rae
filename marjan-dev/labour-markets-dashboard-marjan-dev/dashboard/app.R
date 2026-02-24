@@ -73,7 +73,7 @@ source("R/components/employment_page_card_dbplyr.R", local =  app_env)
 # Inputs
 # ------------------------------------------------------------
 
-tabs <- c(Home = "home", Employment = "employment", Unemployment = "unemployment", Vacancies = "vacancies")
+tabs <- c(Home = "home", Employment = "employment", Unemployment = "unemployment", Vacancies = "vacancies", `Regional Map` = "regional_map")
 default_route <- "home"
 style <- "DBT"
 lfs_tables_full <- get_latest_lfs_table_list(APP_DB$pool)
@@ -91,6 +91,7 @@ source("R/pages/page_home.R", local =  app_env)
 source("R/pages/page_employment.R", local =  app_env)
 source("R/pages/page_unemployment.R", local =  app_env)
 source("R/pages/page_vacancies.R", local =  app_env)
+source("R/pages/page_regional_map.R", local =  app_env)
 
 # ------------------------------------------------------------
 # 404 page UI
@@ -143,6 +144,7 @@ stringDateListInitJS(),  # register the one-time JS handler
       route("employment",   employment_ui("employment")),
       route("unemployment", unemployment_ui("unemployment")),
       route("vacancies",    vacancies_ui("vacancies")),
+      route("regional_map", regional_map_ui("regional_map")),
       page_404 = page_404_ui
     ),
 
@@ -180,6 +182,7 @@ server <- function(input, output, session) {
   employment_server("employment")
   unemployment_server("unemployment")
   vacancies_server("vacancies")
+  regional_map_server("regional_map")
 }
 
 
