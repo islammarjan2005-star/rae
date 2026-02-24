@@ -19,11 +19,6 @@ UK_REGIONS <- data.frame(
   stringsAsFactors = FALSE
 )
 
-EMPLOYMENT_GROUPS   <- c("Employment", "Unemployment",
-                         "Economically active", "Economically inactive")
-VALUE_TYPES         <- c("Rate", "Level")
-AGE_GROUPS_REGIONAL <- c("Aged 16 and over", "Aged 16 to 64")
-
 
 # ---- Data fetch with error handling ----
 get_regional_tbl <- function(conn) {
@@ -90,22 +85,16 @@ regional_map_ui <- function(id) {
           )
         ),
 
-        # ---- Controls ----
+        # ---- Controls (populated dynamically from data) ----
         div(class = "govuk-grid-row",
           div(class = "govuk-grid-column-one-third",
-            selectInput(ns("measure"), "Employment Measure",
-                        choices  = EMPLOYMENT_GROUPS,
-                        selected = "Employment")
+            selectInput(ns("measure"), "Employment Measure", choices = NULL)
           ),
           div(class = "govuk-grid-column-one-third",
-            selectInput(ns("value_type"), "Value Type",
-                        choices  = VALUE_TYPES,
-                        selected = "Rate")
+            selectInput(ns("value_type"), "Value Type", choices = NULL)
           ),
           div(class = "govuk-grid-column-one-third",
-            selectInput(ns("age_group"), "Age Group",
-                        choices  = AGE_GROUPS_REGIONAL,
-                        selected = "Aged 16 and over")
+            selectInput(ns("age_group"), "Age Group", choices = NULL)
           )
         ),
 
@@ -147,10 +136,30 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
       get_regional_tbl(conn)
     })
 
+    # Populate dropdowns from actual data values
+    observe({
+      d <- all_regional()
+      if (is.null(d) || nrow(d) == 0) return()
+
+      measures   <- sort(unique(d$employment_group))
+      vtypes     <- sort(unique(d$value_type))
+      age_groups <- sort(unique(d$age_group))
+
+      # Pick sensible defaults (first match or first item)
+      measure_sel <- if ("Employment" %in% measures) "Employment" else measures[1]
+      vtype_sel   <- if ("Level" %in% vtypes) "Level" else vtypes[1]
+      age_sel     <- age_groups[1]
+
+      updateSelectInput(session, "measure",    choices = measures,   selected = measure_sel)
+      updateSelectInput(session, "value_type", choices = vtypes,     selected = vtype_sel)
+      updateSelectInput(session, "age_group",  choices = age_groups, selected = age_sel)
+    })
+
     # Filtered + merged with coordinates
     region_data <- reactive({
       d <- all_regional()
       if (is.null(d) || nrow(d) == 0) return(NULL)
+      req(input$measure, input$value_type, input$age_group)
 
       d <- d[d$employment_group == input$measure &
              d$value_type      == input$value_type &
@@ -165,7 +174,7 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
       merged
     })
 
-    # ---- Debug output (shows query row count + column names) ----
+    # ---- Debug output ----
     output$debug_info <- renderPrint({
       d <- all_regional()
       cat("Query returned:", nrow(d), "rows\n")
@@ -173,16 +182,22 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
       if (nrow(d) > 0) {
         cat("\nFirst 5 rows:\n")
         print(head(d, 5))
-        cat("\nUnique employment_group:", paste(unique(d$employment_group), collapse = ", "), "\n")
-        cat("Unique value_type:", paste(unique(d$value_type), collapse = ", "), "\n")
-        cat("Unique age_group:", paste(unique(d$age_group), collapse = ", "), "\n")
-        cat("Unique area_code:", paste(unique(d$area_code), collapse = ", "), "\n")
+        cat("\nUnique employment_group:", paste(unique(d$employment_group), collapse = " | "), "\n")
+        cat("Unique value_type:", paste(unique(d$value_type), collapse = " | "), "\n")
+        cat("Unique age_group:", paste(unique(d$age_group), collapse = " | "), "\n")
+        cat("Unique area_code:", paste(unique(d$area_code), collapse = " | "), "\n")
       }
+
+      rd <- region_data()
+      cat("\n--- After filtering ---\n")
+      cat("Selected measure:", input$measure, "\n")
+      cat("Selected value_type:", input$value_type, "\n")
+      cat("Selected age_group:", input$age_group, "\n")
+      cat("Filtered rows:", if (is.null(rd)) 0 else nrow(rd), "\n")
     })
 
     # ---- Map: ALWAYS shows UK outline, overlays data if available ----
     output$uk_map <- renderPlotly({
-      # UK outline always renders
       uk_map <- ggplot2::map_data("world", region = c(
         "UK", "Ireland:Northern Ireland"
       ))
@@ -200,11 +215,9 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
           plot.background = element_rect(fill = "#e8f4f8", colour = NA)
         )
 
-      # Overlay data points only if data exists
       d <- region_data()
       if (!is.null(d) && nrow(d) > 0) {
-        is_rate <- input$value_type == "Rate"
-        suffix  <- if (is_rate) "%" else " (000s)"
+        suffix <- if (grepl("Rate", input$value_type, fixed = TRUE)) "%" else " (000s)"
 
         vals <- d$value
         size_range <- c(4, 12)
@@ -250,9 +263,8 @@ regional_map_server <- function(id, conn = APP_DB$pool) {
       d <- region_data()
       req(!is.null(d) && nrow(d) > 0)
 
-      is_rate <- input$value_type == "Rate"
-      suffix  <- if (is_rate) "%" else " (000s)"
-      x_title <- paste0(input$measure, " ", input$value_type, suffix)
+      suffix  <- if (grepl("Rate", input$value_type, fixed = TRUE)) "%" else " (000s)"
+      x_title <- paste0(input$measure, " ", input$value_type)
 
       d <- d[order(d$value), ]
       d$region_name <- factor(d$region_name, levels = d$region_name)
