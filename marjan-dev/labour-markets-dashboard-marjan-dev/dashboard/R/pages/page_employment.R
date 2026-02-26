@@ -69,44 +69,6 @@ employment_ui <- function(id) {
                                            uiOutput(ns("card_unemploy")),
                                            uiOutput(ns("card_duration")),
                                            uiOutput(ns("card_pop"))
-                                       ),
-                                       
-                                       h2(class = "govuk-heading-m", "Trends over time"),
-                                       
-                                       sliderInput(ns("range"), "Year Range",
-                                                   min(economics$date), max(economics$date),
-                                                   value = c(as.Date("2010-01-01"), max(economics$date)),
-                                                   width = "100%"),
-                                       
-                                       shinyWidgets::sliderTextInput(
-                                         inputId = ns("lfs_date_range"),
-                                         label   = "Select LFS Data Range",
-                                         choices = rev(lfs_tables_full$yearquarter),
-                                         selected = c("2020 Q1", lfs_tables_full$yearquarter[1]),
-                                         grid = TRUE,
-                                         width = "100%"
-                                       ),
-                                       
-                                       uiOutput(ns("date_slider")),
-                                       textOutput(ns("selection")),
-                                       
-                                       selectizeInput(
-                                         inputId = ns("table_select"),
-                                         label   = "Pick table from range to display:",
-                                         choices = NULL,
-                                         options = list(placeholder = "Type to search..."),
-                                         width   = "100%"
-                                       ),
-                                       
-                                       verbatimTextOutput(ns("picked_table")),
-                                       textOutput(ns("lfs_list")),
-                                       
-                                       # Trend vis card
-                                       mod_govuk_data_vis_card_ui(
-                                         id = ns("trend_card"),
-                                         title = "Employment trend",
-                                         help_text = "This card hosts the visual only. Global and visual-specific filters live elsewhere.",
-                                         visual_content = plotlyOutput(ns("trend"), height = "350px")
                                        )
                           ),
                           
@@ -149,51 +111,11 @@ employment_ui <- function(id) {
 #' @export
 employment_server <- function(id) {
   moduleServer(id, function(input, output, session) {
-    
-    mod_govuk_data_vis_card_server("trend_card")
-    
-    dat <- reactive({
-      economics[economics$date >= input$range[1] & economics$date <= input$range[2], ]
-    })
-    
-    output$selection <- renderText({
-      paste("Selected range:",
-            input$lfs_date_range[1], "to",
-            input$lfs_date_range[2])
-    })
-    
-    lfs_selected_tables <- reactive({
-      get_lfs_table_from_range(input$lfs_date_range[1], input$lfs_date_range[2])
-    })
-    
-    output$lfs_list <- renderText({
-      paste("Selected LFS tables: ",
-            paste(lfs_selected_tables(), collapse = ", "))
-    })
-    
-    observeEvent(lfs_selected_tables(), {
-      choices <- lfs_selected_tables()
-      req(length(choices) > 0)
-      
-      current <- isolate(input$table_select)
-      selected <- if (!is.null(current) && current %in% choices) current else choices[1]
-      
-      updateSelectizeInput(
-        session  = session,
-        inputId  = "table_select",
-        choices  = choices,
-        selected = selected,
-        server   = TRUE
-      )
-    }, ignoreInit = FALSE)
-    
-    output$picked_table <- renderPrint({
-      input$table_select
-    })
-    
-    
+
+    dat <- reactive({ economics })
+
     #  Stats Cards
-    
+
     output$card_unemploy <- renderUI({
       d <- dat(); req(nrow(d) >= 2)
       curr <- tail(d$unemploy, 1); prev <- tail(d$unemploy, 2)[1]
@@ -239,19 +161,6 @@ employment_server <- function(id) {
       )
     })
     
-    # Trend plot
-    output$trend <- renderPlotly({
-      ggplotly(
-        ggplot(dat(), aes(date, unemploy)) +
-          geom_area(fill = "#cf102d", alpha = 0.2) +
-          geom_line(col = "#cf102d", size = 1) +
-          theme_minimal() +
-          labs(x = NULL, y = "Unemployed (000s)")
-      )
-    })
-    
-    
-
     # Employment by Age (replicating FT/PT card pattern)
     employment_age_stats_card_server(
       id = "age_card"

@@ -69,6 +69,7 @@ source("R/components/govuk_visuals.R", local =  app_env)
 source("R/components/govuk_page.R", local =  app_env)          # govuk_page() wrapper for a blank page template
 source("R/components/lfs_scripts.R", local =  app_env)
 source("R/components/employment_page_card_dbplyr.R", local =  app_env)
+source("R/components/unemployment_page_card_dbplyr.R", local =  app_env)
 # ------------------------------------------------------------
 # Inputs
 # ------------------------------------------------------------

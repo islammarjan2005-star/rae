@@ -556,11 +556,11 @@ dbt_build_stacked_area <- function(
       plt <- plotly::add_trace(
         plt, data = d1g,
         x = ~time_period, y = ~value, text = ~.__hover_y__.,
-        type = "scatter", mode = "none",
+        type = "scatter", mode = "lines",
         stackgroup = "one",
         fill = fill_mode,
         fillcolor = col_g,
-        line = list(width = 0, color = col_g),
+        line = list(width = 0.5, color = col_g),
         name = as.character(g),
         hovertemplate = paste0(as.character(g), ": %{text}<extra></extra>"),
         legendgroup = dataset1_group,
