@@ -87,6 +87,7 @@ govuk_stats_card <- function(
     headline,                  # formatted string OR numeric; main value
     delta = NULL,              # formatted string OR numeric; shown as govuk-tag
     period = "vs last month",  # label after delta
+    subtitle = NULL,           # optional context line, e.g. time period "Oct-Dec 2024"
     accent_hex = "#cf102d",    # top border accent (DBT red)
     good_if_increase = TRUE,   # TRUE: increase => green; FALSE: increase => red
     tag_colour = NULL,         # override: 'green'|'red'|'blue'
@@ -120,6 +121,9 @@ govuk_stats_card <- function(
       class = paste("govuk-summary-card", if (!is.null(classes)) classes else ""),
       style = paste0("padding:15px; background:#f3f2f1; border-top:4px solid ", accent_hex, ";"),
       htmltools::tags$h3(class = "govuk-heading-s", title),
+      if (!is.null(subtitle)) htmltools::tags$p(
+        class = "govuk-body-s", style = "margin-top:-5px; margin-bottom:5px; color:#505a5f;", subtitle
+      ),
       htmltools::tags$h2(class = "govuk-heading-l", headline_out),
       if (!is.null(delta_out)) htmltools::tags$strong(
         class = paste0("govuk-tag govuk-tag--", tag_col),

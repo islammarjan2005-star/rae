@@ -65,6 +65,7 @@ employment_ui <- function(id) {
                       div(class = "govuk-grid-column-full",
                           
                           tags$section(id = "employment-overview",
+                                       uiOutput(ns("takeaway_banner")),
                                        div(class = "govuk-grid-row",
                                            uiOutput(ns("card_unemploy")),
                                            uiOutput(ns("card_duration")),
@@ -112,15 +113,49 @@ employment_ui <- function(id) {
 employment_server <- function(id) {
   moduleServer(id, function(input, output, session) {
 
+    # Takeaway banner
+    output$takeaway_banner <- renderUI({
+      df_level <- query_data(APP_DB$pool, "MGRZ", divide = 1)
+      df_rate  <- query_data(APP_DB$pool, "LF24", divide = 1)
+      req(nrow(df_level) >= 2, nrow(df_rate) >= 2)
+
+      period     <- tail(df_level$time_period, 1)
+      emp_curr   <- tail(df_level$value, 1)
+      emp_prev   <- tail(df_level$value, 2)[1]
+      emp_delta  <- emp_curr - emp_prev
+      rate_curr  <- tail(df_rate$value, 1)
+      rate_prev  <- tail(df_rate$value, 2)[1]
+      rate_delta <- rate_curr - rate_prev
+
+      direction <- if (emp_delta >= 0) "rose" else "fell"
+      rate_dir  <- if (abs(rate_delta) < 0.1) "held steady at"
+                   else if (rate_delta > 0) "rose to" else "fell to"
+
+      summary <- sprintf(
+        "Total employment %s by %sk to %sk in %s, while the employment rate %s %s.",
+        direction,
+        govuk_format_number(abs(round(emp_delta))),
+        govuk_format_number(round(emp_curr)),
+        period, rate_dir,
+        govuk_format_percent1(rate_curr)
+      )
+
+      tags$div(class = "govuk-inset-text", style = "border-color: #1d70b8;",
+        tags$p(class = "govuk-body", tags$strong(summary))
+      )
+    })
+
     # Card 1: Total Employment (16+) — level in 000s
     output$card_unemploy <- renderUI({
       df <- query_data(APP_DB$pool, "MGRZ", divide = 1)
       req(nrow(df) >= 2)
+      latest_period <- tail(df$time_period, 1)
       curr <- tail(df$value, 1); prev <- tail(df$value, 2)[1]
       delta <- curr - prev
       govuk_stats_card(
         id       = session$ns("total_emp"),
         title    = "Total Employment (16+)",
+        subtitle = latest_period,
         headline = paste0(govuk_format_number(round(curr)), "k"),
         delta    = paste0(ifelse(delta >= 0, "+", ""), govuk_format_number(round(delta)), "k"),
         period   = "vs previous period",
@@ -132,11 +167,13 @@ employment_server <- function(id) {
     output$card_duration <- renderUI({
       df <- query_data(APP_DB$pool, "LF24", divide = 1)
       req(nrow(df) >= 2)
+      latest_period <- tail(df$time_period, 1)
       curr <- tail(df$value, 1); prev <- tail(df$value, 2)[1]
       delta <- curr - prev
       govuk_stats_card(
         id       = session$ns("emp_rate"),
         title    = "Employment Rate (16-64)",
+        subtitle = latest_period,
         headline = govuk_format_percent1(curr),
         delta    = paste0(ifelse(delta >= 0, "+", ""), sprintf("%.1f", delta), "pp"),
         period   = "vs previous period",
@@ -148,12 +185,14 @@ employment_server <- function(id) {
     output$card_pop <- renderUI({
       df <- query_data(APP_DB$pool, "MGRZ", divide = 1)
       req(nrow(df) >= 13)
+      latest_period <- tail(df$time_period, 1)
       curr <- tail(df$value, 1)
       yoy  <- df$value[nrow(df) - 12]
       delta <- curr - yoy
       govuk_stats_card(
         id       = session$ns("yoy_change"),
         title    = "Year-on-Year Change",
+        subtitle = latest_period,
         headline = paste0(ifelse(delta >= 0, "+", ""), govuk_format_number(round(delta)), "k"),
         delta    = paste0(ifelse(delta >= 0, "+", ""), sprintf("%.1f", (delta / yoy) * 100), "%"),
         period   = "vs 12 months ago",
