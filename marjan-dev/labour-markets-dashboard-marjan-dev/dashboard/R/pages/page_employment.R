@@ -112,59 +112,59 @@ employment_ui <- function(id) {
 employment_server <- function(id) {
   moduleServer(id, function(input, output, session) {
 
-    dat <- reactive({ economics })
-
-    #  Stats Cards
-
+    # Card 1: Total Employment (16+) — level in 000s
     output$card_unemploy <- renderUI({
-      d <- dat(); req(nrow(d) >= 2)
-      curr <- tail(d$unemploy, 1); prev <- tail(d$unemploy, 2)[1]
+      df <- query_data(APP_DB$pool, "MGRZ", divide = 1)
+      req(nrow(df) >= 2)
+      curr <- tail(df$value, 1); prev <- tail(df$value, 2)[1]
       delta <- curr - prev
-      
       govuk_stats_card(
-        id       = session$ns("unemploy"),
-        title    = "Total Unemployed",
-        headline = govuk_format_number(curr),
-        delta    = govuk_format_number(delta),
-        period   = "vs last month",
-        good_if_increase = FALSE
-      )
-    })
-    
-    output$card_duration <- renderUI({
-      d <- dat(); req(nrow(d) >= 2)
-      curr <- tail(d$uempmed, 1); prev <- tail(d$uempmed, 2)[1]
-      delta <- curr - prev
-      
-      govuk_stats_card(
-        id       = session$ns("duration"),
-        title    = "Duration (Weeks)",
-        headline = govuk_format_number(curr),
-        delta    = scales::comma(round(delta, 1)),
-        period   = "vs last month",
-        good_if_increase = FALSE
-      )
-    })
-    
-    output$card_pop <- renderUI({
-      d <- dat(); req(nrow(d) >= 2)
-      curr <- tail(d$pop, 1); prev <- tail(d$pop, 2)[1]
-      delta <- curr - prev
-      
-      govuk_stats_card(
-        id       = session$ns("population"),
-        title    = "Population",
-        headline = govuk_format_number(curr),
-        delta    = scales::comma(round(delta, 1)),
-        period   = "vs last month",
+        id       = session$ns("total_emp"),
+        title    = "Total Employment (16+)",
+        headline = paste0(govuk_format_number(round(curr)), "k"),
+        delta    = paste0(ifelse(delta >= 0, "+", ""), govuk_format_number(round(delta)), "k"),
+        period   = "vs previous period",
         good_if_increase = TRUE
       )
     })
-    
+
+    # Card 2: Employment Rate (16-64) — rate in %
+    output$card_duration <- renderUI({
+      df <- query_data(APP_DB$pool, "LF24", divide = 1)
+      req(nrow(df) >= 2)
+      curr <- tail(df$value, 1); prev <- tail(df$value, 2)[1]
+      delta <- curr - prev
+      govuk_stats_card(
+        id       = session$ns("emp_rate"),
+        title    = "Employment Rate (16-64)",
+        headline = govuk_format_percent1(curr),
+        delta    = paste0(ifelse(delta >= 0, "+", ""), sprintf("%.1f", delta), "pp"),
+        period   = "vs previous period",
+        good_if_increase = TRUE
+      )
+    })
+
+    # Card 3: Year-on-Year Change — computed from MGRZ
+    output$card_pop <- renderUI({
+      df <- query_data(APP_DB$pool, "MGRZ", divide = 1)
+      req(nrow(df) >= 13)
+      curr <- tail(df$value, 1)
+      yoy  <- df$value[nrow(df) - 12]
+      delta <- curr - yoy
+      govuk_stats_card(
+        id       = session$ns("yoy_change"),
+        title    = "Year-on-Year Change",
+        headline = paste0(ifelse(delta >= 0, "+", ""), govuk_format_number(round(delta)), "k"),
+        delta    = paste0(ifelse(delta >= 0, "+", ""), sprintf("%.1f", (delta / yoy) * 100), "%"),
+        period   = "vs 12 months ago",
+        good_if_increase = TRUE
+      )
+    })
+
     # Employment by Age (replicating FT/PT card pattern)
     employment_age_stats_card_server(
       id = "age_card"
     )
-    
+
   })
 }
