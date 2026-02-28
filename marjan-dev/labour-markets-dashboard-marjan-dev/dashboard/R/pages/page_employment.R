@@ -18,7 +18,7 @@ employment_age_codes <- data.frame(
   stringsAsFactors = FALSE
 )
 
-#' Employment codes for stacked 
+#' Employment codes for stacked
 stacked_employment_codes <- data.frame(
   age_group = AGE_STACK,
   code = c("YBTO", "YBTR", "YBTU", "YBTX", "LF26", "LFK4"),
@@ -37,7 +37,7 @@ stacked_employment_codes <- data.frame(
 #' @export
 employment_ui <- function(id) {
   ns <- NS(id)
-  
+
   toc_sections <- list(
     list(
       heading = "Live Full Sample",
@@ -50,29 +50,32 @@ employment_ui <- function(id) {
                 "Employment by Sector" = "employment-sector")
     )
   )
-  
+
   tagList(
+    skeleton_card_css(),
+    back_to_top_css(),
+
     side_nav(ns, sections = toc_sections, title = "On this page"),
-    
+
     div(class = "govuk-width-container",
-        tags$main(class = "govuk-main-wrapper",
+        tags$main(class = "govuk-main-wrapper", id = "main-content",
                   tags$span(class = "govuk-caption-xl", "Labour Market"),
                   tags$h1(class = "govuk-heading-xl", "Employment"),
                   tags$p(class = "govuk-body-s", paste("Last updated:", Sys.Date())),
-                  
+
                   #  Grid-
                   div(class = "govuk-grid-row",
                       div(class = "govuk-grid-column-full",
-                          
+
                           tags$section(id = "employment-overview",
-                                       uiOutput(ns("takeaway_banner")),
+                                       div(class = "skeleton-container", uiOutput(ns("takeaway_banner"))),
                                        div(class = "govuk-grid-row",
-                                           uiOutput(ns("card_unemploy")),
-                                           uiOutput(ns("card_duration")),
-                                           uiOutput(ns("card_pop"))
+                                           div(class = "skeleton-container", uiOutput(ns("card_unemploy"))),
+                                           div(class = "skeleton-container", uiOutput(ns("card_duration"))),
+                                           div(class = "skeleton-container", uiOutput(ns("card_pop")))
                                        )
                           ),
-                          
+
                           tags$section(id = "employment-age",
                                        tags$h1(class = "govuk-heading-xl", "Employment by Age"),
 
@@ -81,22 +84,37 @@ employment_ui <- function(id) {
                                          id = ns("age_card")
                                        )
                           ),
-                          
+
                           tags$section(id = "employment-gender",
                                        tags$h1(class = "govuk-heading-xl", "Employment by Gender"),
-                                       textAreaInput(ns("notes_gender"), label = NULL, value = "",
-                                                     placeholder = strrep("This is a very long placeholder. ", 200))
+                                       coming_soon_card("This section is under development.")
                           ),
-                          
+
                           tags$section(id = "employment-sector",
                                        tags$h1(class = "govuk-heading-xl", "Employment by Sector"),
-                                       textAreaInput(ns("notes_sector"), label = NULL, value = "",
-                                                     placeholder = strrep("This is a very long placeholder. ", 200))
+                                       coming_soon_card("This section is under development.")
                           )
                       )
                   )
         )
-    )
+    ),
+
+    # Back to top
+    tags$a(id = ns("back_to_top"), href = "#", class = "govuk-link back-to-top",
+           HTML("&uarr; Back to top")),
+    tags$script(HTML(sprintf("
+      $(function(){
+        var btn = document.getElementById('%s');
+        if (!btn) return;
+        window.addEventListener('scroll', function(){
+          btn.classList.toggle('visible', window.scrollY > 400);
+        });
+        btn.addEventListener('click', function(e){
+          e.preventDefault();
+          window.scrollTo({top:0, behavior:'smooth'});
+        });
+      });
+    ", ns("back_to_top"))))
   )
 }
 
@@ -113,7 +131,7 @@ employment_ui <- function(id) {
 employment_server <- function(id) {
   moduleServer(id, function(input, output, session) {
 
-    # Takeaway banner
+    # Takeaway banner (notification-banner style)
     output$takeaway_banner <- renderUI({
       df_level <- query_data(APP_DB$pool, "MGRZ", divide = 1)
       df_rate  <- query_data(APP_DB$pool, "LF24", divide = 1)
@@ -140,8 +158,18 @@ employment_server <- function(id) {
         govuk_format_percent1(rate_curr)
       )
 
-      tags$div(class = "govuk-inset-text", style = "border-color: #1d70b8;",
-        tags$p(class = "govuk-body", tags$strong(summary))
+      tags$div(
+        class = "govuk-notification-banner",
+        role = "region",
+        `aria-labelledby` = "emp-banner-title",
+        `data-module` = "govuk-notification-banner",
+        tags$div(class = "govuk-notification-banner__header",
+          tags$h2(class = "govuk-notification-banner__title",
+                  id = "emp-banner-title", "Latest from the data")
+        ),
+        tags$div(class = "govuk-notification-banner__content",
+          tags$p(class = "govuk-notification-banner__heading", summary)
+        )
       )
     })
 
@@ -152,13 +180,16 @@ employment_server <- function(id) {
       latest_period <- tail(df$time_period, 1)
       curr <- tail(df$value, 1); prev <- tail(df$value, 2)[1]
       delta <- curr - prev
+      spark <- sparkline_svg(tail(df$value, 12), colour = "#00703c")
       govuk_stats_card(
         id       = session$ns("total_emp"),
         title    = "Total Employment (16+)",
         subtitle = latest_period,
+        sparkline = spark,
         headline = paste0(govuk_format_number(round(curr)), "k"),
         delta    = paste0(ifelse(delta >= 0, "+", ""), govuk_format_number(round(delta)), "k"),
         period   = "vs previous period",
+        accent_hex = "#00703c",
         good_if_increase = TRUE
       )
     })
@@ -170,13 +201,16 @@ employment_server <- function(id) {
       latest_period <- tail(df$time_period, 1)
       curr <- tail(df$value, 1); prev <- tail(df$value, 2)[1]
       delta <- curr - prev
+      spark <- sparkline_svg(tail(df$value, 12), colour = "#00703c")
       govuk_stats_card(
         id       = session$ns("emp_rate"),
         title    = "Employment Rate (16-64)",
         subtitle = latest_period,
+        sparkline = spark,
         headline = govuk_format_percent1(curr),
         delta    = paste0(ifelse(delta >= 0, "+", ""), sprintf("%.1f", delta), "pp"),
         period   = "vs previous period",
+        accent_hex = "#00703c",
         good_if_increase = TRUE
       )
     })
@@ -189,13 +223,16 @@ employment_server <- function(id) {
       curr <- tail(df$value, 1)
       yoy  <- df$value[nrow(df) - 12]
       delta <- curr - yoy
+      spark <- sparkline_svg(tail(df$value, 12), colour = "#00703c")
       govuk_stats_card(
         id       = session$ns("yoy_change"),
         title    = "Year-on-Year Change",
         subtitle = latest_period,
+        sparkline = spark,
         headline = paste0(ifelse(delta >= 0, "+", ""), govuk_format_number(round(delta)), "k"),
         delta    = paste0(ifelse(delta >= 0, "+", ""), sprintf("%.1f", (delta / yoy) * 100), "%"),
         period   = "vs 12 months ago",
+        accent_hex = "#00703c",
         good_if_increase = TRUE
       )
     })

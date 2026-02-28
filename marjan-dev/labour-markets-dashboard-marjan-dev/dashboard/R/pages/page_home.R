@@ -4,6 +4,8 @@ home_ui <- function(id) {
   ns <- NS(id)
 
   tagList(
+    skeleton_card_css(),
+
     # --- Scoped CSS for home page zones ---
     tags$style(HTML("
       /* Zone 1: Hero panel */
@@ -124,7 +126,7 @@ home_ui <- function(id) {
       tags$main(class = "govuk-main-wrapper",
 
         # Zone 2: Notification banner (takeaway)
-        uiOutput(ns("home_takeaway")),
+        div(class = "skeleton-container", uiOutput(ns("home_takeaway"))),
 
         # Zone 3a: Employment swim lane
         div(class = "home-lane home-lane--green",
@@ -137,9 +139,9 @@ home_ui <- function(id) {
             )
           ),
           div(class = "govuk-grid-row",
-            uiOutput(ns("home_emp_total")),
-            uiOutput(ns("home_emp_rate")),
-            uiOutput(ns("home_emp_yoy"))
+            div(class = "skeleton-container", uiOutput(ns("home_emp_total"))),
+            div(class = "skeleton-container", uiOutput(ns("home_emp_rate"))),
+            div(class = "skeleton-container", uiOutput(ns("home_emp_yoy")))
           )
         ),
 
@@ -157,9 +159,9 @@ home_ui <- function(id) {
             )
           ),
           div(class = "govuk-grid-row",
-            uiOutput(ns("home_unemp_total")),
-            uiOutput(ns("home_unemp_rate")),
-            uiOutput(ns("home_unemp_yoy"))
+            div(class = "skeleton-container", uiOutput(ns("home_unemp_total"))),
+            div(class = "skeleton-container", uiOutput(ns("home_unemp_rate"))),
+            div(class = "skeleton-container", uiOutput(ns("home_unemp_yoy")))
           )
         ),
 
@@ -283,13 +285,16 @@ home_server <- function(id) {
       latest_period <- tail(df$time_period, 1)
       curr <- tail(df$value, 1); prev <- tail(df$value, 2)[1]
       delta <- curr - prev
+      spark <- sparkline_svg(tail(df$value, 12), colour = "#00703c")
       govuk_stats_card(
         id       = session$ns("emp_total"),
         title    = "Total Employment (16+)",
         subtitle = latest_period,
+        sparkline = spark,
         headline = paste0(govuk_format_number(round(curr)), "k"),
         delta    = paste0(ifelse(delta >= 0, "+", ""), govuk_format_number(round(delta)), "k"),
         period   = "vs previous period",
+        accent_hex = "#00703c",
         good_if_increase = TRUE
       )
     })
@@ -300,13 +305,16 @@ home_server <- function(id) {
       latest_period <- tail(df$time_period, 1)
       curr <- tail(df$value, 1); prev <- tail(df$value, 2)[1]
       delta <- curr - prev
+      spark <- sparkline_svg(tail(df$value, 12), colour = "#00703c")
       govuk_stats_card(
         id       = session$ns("emp_rate"),
         title    = "Employment Rate (16-64)",
         subtitle = latest_period,
+        sparkline = spark,
         headline = govuk_format_percent1(curr),
         delta    = paste0(ifelse(delta >= 0, "+", ""), sprintf("%.1f", delta), "pp"),
         period   = "vs previous period",
+        accent_hex = "#00703c",
         good_if_increase = TRUE
       )
     })
@@ -318,13 +326,16 @@ home_server <- function(id) {
       curr <- tail(df$value, 1)
       yoy  <- df$value[nrow(df) - 12]
       delta <- curr - yoy
+      spark <- sparkline_svg(tail(df$value, 12), colour = "#00703c")
       govuk_stats_card(
         id       = session$ns("emp_yoy"),
         title    = "Employment YoY Change",
         subtitle = latest_period,
+        sparkline = spark,
         headline = paste0(ifelse(delta >= 0, "+", ""), govuk_format_number(round(delta)), "k"),
         delta    = paste0(ifelse(delta >= 0, "+", ""), sprintf("%.1f", (delta / yoy) * 100), "%"),
         period   = "vs 12 months ago",
+        accent_hex = "#00703c",
         good_if_increase = TRUE
       )
     })
@@ -337,13 +348,16 @@ home_server <- function(id) {
       latest_period <- tail(df$time_period, 1)
       curr <- tail(df$value, 1); prev <- tail(df$value, 2)[1]
       delta <- curr - prev
+      spark <- sparkline_svg(tail(df$value, 12), colour = "#f47738")
       govuk_stats_card(
         id       = session$ns("unemp_total"),
         title    = "Total Unemployment (16+)",
         subtitle = latest_period,
+        sparkline = spark,
         headline = paste0(govuk_format_number(round(curr)), "k"),
         delta    = paste0(ifelse(delta >= 0, "+", ""), govuk_format_number(round(delta)), "k"),
         period   = "vs previous period",
+        accent_hex = "#f47738",
         good_if_increase = FALSE
       )
     })
@@ -354,13 +368,16 @@ home_server <- function(id) {
       latest_period <- tail(df$time_period, 1)
       curr <- tail(df$value, 1); prev <- tail(df$value, 2)[1]
       delta <- curr - prev
+      spark <- sparkline_svg(tail(df$value, 12), colour = "#f47738")
       govuk_stats_card(
         id       = session$ns("unemp_rate"),
         title    = "Unemployment Rate (16-64)",
         subtitle = latest_period,
+        sparkline = spark,
         headline = govuk_format_percent1(curr),
         delta    = paste0(ifelse(delta >= 0, "+", ""), sprintf("%.1f", delta), "pp"),
         period   = "vs previous period",
+        accent_hex = "#f47738",
         good_if_increase = FALSE
       )
     })
@@ -372,13 +389,16 @@ home_server <- function(id) {
       curr <- tail(df$value, 1)
       yoy  <- df$value[nrow(df) - 12]
       delta <- curr - yoy
+      spark <- sparkline_svg(tail(df$value, 12), colour = "#f47738")
       govuk_stats_card(
         id       = session$ns("unemp_yoy"),
         title    = "Unemployment YoY Change",
         subtitle = latest_period,
+        sparkline = spark,
         headline = paste0(ifelse(delta >= 0, "+", ""), govuk_format_number(round(delta)), "k"),
         delta    = paste0(ifelse(delta >= 0, "+", ""), sprintf("%.1f", (delta / yoy) * 100), "%"),
         period   = "vs 12 months ago",
+        accent_hex = "#f47738",
         good_if_increase = FALSE
       )
     })

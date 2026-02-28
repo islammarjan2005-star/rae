@@ -80,6 +80,95 @@ govuk_format_percent1 <- function(x) {
 #'   format_delta = govuk_format_percent1,
 #'   good_if_increase = FALSE
 #' )
+#' Inline SVG sparkline
+#'
+#' Takes a numeric vector and returns an HTML-safe inline SVG polyline.
+#' No axes, no labels — just a tiny trend line with a dot on the latest point.
+#'
+#' @param values Numeric vector (at least 2 values).
+#' @param width  Pixel width of the SVG (default 180).
+#' @param height Pixel height of the SVG (default 35).
+#' @param colour Stroke colour (default "#0b0c0c").
+#' @return An `htmltools::HTML` string containing an `<svg>` element, or NULL.
+#' @export
+sparkline_svg <- function(values, width = 180, height = 35, colour = "#0b0c0c") {
+  values <- as.numeric(values)
+  values <- values[!is.na(values)]
+  if (length(values) < 2) return(NULL)
+  n  <- length(values)
+  mn <- min(values); mx <- max(values)
+  rng <- mx - mn
+  if (rng == 0) rng <- 1
+  pad <- 2
+  xs <- round(seq(pad, width - pad, length.out = n), 1)
+  ys <- round(height - pad - ((values - mn) / rng) * (height - 2 * pad), 1)
+  pts <- paste(xs, ys, sep = ",", collapse = " ")
+  svg <- sprintf(
+    '<svg width="%d" height="%d" viewBox="0 0 %d %d" style="display:block; margin:4px 0;" aria-hidden="true">
+      <polyline points="%s" fill="none" stroke="%s" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="%s" cy="%s" r="2.5" fill="%s"/>
+    </svg>',
+    width, height, width, height, pts, colour,
+    tail(xs, 1), tail(ys, 1), colour
+  )
+  htmltools::HTML(svg)
+}
+
+#' Skeleton loading CSS for renderUI cards
+#'
+#' Returns a singleton style tag with shimmer animation.
+#' Wrap uiOutput() calls in div(class = "skeleton-container", ...) to use.
+#' @return An htmltools singleton style tag.
+#' @export
+skeleton_card_css <- function() {
+  htmltools::singleton(tags$head(tags$style(HTML("
+    .skeleton-container { min-height: 140px; }
+    .skeleton-container > .shiny-html-output:empty::before {
+      content: '';
+      display: block;
+      height: 130px;
+      border-radius: 4px;
+      background: linear-gradient(90deg, #f3f2f1 25%, #e8e6e4 50%, #f3f2f1 75%);
+      background-size: 200% 100%;
+      animation: skeleton-shimmer 1.5s ease-in-out infinite;
+    }
+    @keyframes skeleton-shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+  "))))
+}
+
+#' "Coming soon" placeholder card
+#' @param message Character. Body text.
+#' @return An htmltools tagList.
+#' @export
+coming_soon_card <- function(message = "This section is under development.") {
+  tags$div(
+    class = "coming-soon-card",
+    style = "border:2px dashed #b1b4b6; background:#f8f8f8; padding:30px; text-align:center; color:#505a5f; border-radius:4px; margin-bottom:30px;",
+    tags$p(class = "govuk-body", message)
+  )
+}
+
+#' Back-to-top button CSS (singleton)
+#' @return An htmltools singleton style tag.
+#' @export
+back_to_top_css <- function() {
+  htmltools::singleton(tags$head(tags$style(HTML("
+    .back-to-top {
+      position: fixed; bottom: 20px; right: 25px; z-index: 100;
+      background: #fff; padding: 8px 14px;
+      border: 1px solid #b1b4b6; border-radius: 4px;
+      font-size: 14px; font-weight: 700; text-decoration: none;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .back-to-top.visible { opacity: 1; pointer-events: auto; }
+  "))))
+}
+
 #' @export
 govuk_stats_card <- function(
     id,
@@ -88,6 +177,7 @@ govuk_stats_card <- function(
     delta = NULL,              # formatted string OR numeric; shown as govuk-tag
     period = "vs last month",  # label after delta
     subtitle = NULL,           # optional context line, e.g. time period "Oct-Dec 2024"
+    sparkline = NULL,          # optional inline SVG from sparkline_svg()
     accent_hex = "#cf102d",    # top border accent (DBT red)
     good_if_increase = TRUE,   # TRUE: increase => green; FALSE: increase => red
     tag_colour = NULL,         # override: 'green'|'red'|'blue'
@@ -125,6 +215,7 @@ govuk_stats_card <- function(
         class = "govuk-body-s", style = "margin-top:-5px; margin-bottom:5px; color:#505a5f;", subtitle
       ),
       htmltools::tags$h2(class = "govuk-heading-l", headline_out),
+      if (!is.null(sparkline)) sparkline,
       if (!is.null(delta_out)) htmltools::tags$strong(
         class = paste0("govuk-tag govuk-tag--", tag_col),
         paste(delta_out, period)
